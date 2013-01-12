@@ -1,0 +1,14 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+#.local/share/applications/3gDialer.desktop
+#.local/share/icons/hicolor/32x32/apps/3gDialer.png
+#.local/share/icons/3gDialer.png
+Type=Application
+Name=Apen 3gDialer
+GenericName=Apen 3gDialer
+Comment=3G Dialer
+Icon=3gDialer.png
+Exec=EXEC_PATH
+Terminal=false
+Categories=GNOME;Network;
+Encoding=UTF-8

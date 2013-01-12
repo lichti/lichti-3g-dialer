@@ -1,0 +1,165 @@
+#!/bin/bash
+
+DIR=`dirname "$0"`
+NAME=`basename "$0"`
+
+TITLE="--title Apen-3gDialer"
+ICON="--window-icon=$DIR/share/icons/3gDialer.png"
+
+
+installdef(){
+    if [ ! -d $1/$2 ]; then
+        mkdir -p $1/$2
+    fi
+
+    if [ -f $1/$2/etc/wvdial.conf ]; then
+        mv $1/$2/etc/wvdial.conf $1/$2/etc/wvdial.conf.bak
+    fi    
+
+    if [ -f $1/$2/lib/centos.sh ]; then
+        mv $1/$2/lib/centos.sh $1/$2/lib/centos.sh
+    fi   
+
+    if [ -f $1/$2/3gDialer ]; then
+        mv $1/$2/3gDialer $1/$2/3gDialer.bak
+    fi    
+}
+
+installall(){
+    if [ $UID = 0 ]; then
+        installdef "/opt" "3gDialer"
+        cp -rf "$DIR"/* /opt/3gDialer/
+        sed s/EXEC_PATH/"\/opt\/3gDialer\/3gDialer"/g \
+           "$DIR"/share/applications/3gDialer.desktop > /usr/share/applications/3gDialer.desktop
+        cp -rf "$DIR"/share/icons/3gDialer.png /usr/share/icons
+        
+        zenity $TITLE "$ICON" --info --text "Instalado com sucesso."   
+    else
+        zenity $TITLE "$ICON" --warning --text "Você precisa ser o root"
+    fi
+    }
+
+installuser(){
+    installdef "/$HOME" ".3gDialer"
+    cp -rf "$DIR"/* /$HOME/.3gDialer/
+    sed -e "s#EXEC_PATH#$HOME/.3gDialer/3gDialer#g" \
+       "$DIR"/share/applications/3gDialer.desktop > "$HOME"/.local/share/applications/3gDialer.desktop
+    cp -rf "$DIR"/share/icons/3gDialer.png "$HOME"/.local/share/icons
+
+    zenity $TITLE "$ICON" --info --text "Instalado com sucesso."   
+}
+
+removeall(){
+    if [ $UID = 0 ]; then
+        rm -rf /opt/3gDialer/
+        rm -rf /usr/share/applications/3gDialer.desktop
+        rm -rf /usr/share/icons/3gDialer.png
+        zenity $TITLE "$ICON" --info --text "Desinstalado com sucesso."   
+    else
+        zenity $TITLE "$ICON" --warning --text "Você precisa ser o root"
+    fi
+    }
+
+removeuser(){
+    rm -rf /$HOME/.3gDialer/
+    rm -rf "$HOME"/.local/share/applications/3gDialer.desktop
+    rm -rf "$HOME"/.local/share/icons/3gDialer.png
+    zenity $TITLE "$ICON" --info --text "Desinstalado com sucesso."   
+}
+
+notification(){
+    zenity $TITLE "$ICON" --notification  --text "3gDialer Conectado"
+    zenity $TITLE "$ICON" --question --text "Desconectar?"
+    if [ $? -eq 0 ]; then
+        if [ -z "$(cat /etc/issue | grep CentOS)" ]; then
+            killall -s TERM wvdial
+            exit 0
+        else
+            sudo killall -s TERM wvdial
+        fi
+    else
+        notification    
+    fi
+}
+
+conectar(){
+
+    if [ -f "$DIR"/etc/wvdial.conf ]; then
+        WVCFG="$DIR"/etc/wvdial.conf
+    fi
+
+    if [ -f "$HOME"/.3gDialer/etc/wvdial.conf ]; then
+        WVCFG="$HOME"/.3gDialer/etc/wvdial.conf
+    fi
+
+    if [ -f /opt/3gDialer/etc/wvdial.conf ]; then
+        WVCFG=/opt/3gDialer/etc/wvdial.conf
+    fi
+    
+    if [ -z "$(cat /etc/issue | grep CentOS)" ]; then
+        wvdial -C "$WVCFG" $1 > /tmp/3gdialer.tmp 2>&1 &
+    else
+        sudo wvdial -C "$WVCFG" $1 > /tmp/3gdialer.tmp 2>&1 &
+    fi
+
+    (while [ -z "$(cat /tmp/3gdialer.tmp | grep 'local  IP address')" ]; do echo "" ; done) | \
+                     zenity $TITLE "$ICON" --text "Conectando" --progress --pulsate --auto-close
+
+    if [ $? -eq 1 ]; then
+        exit 0
+    fi
+        
+    zenity $TITLE "$ICON" --info --text "Conectado"
+    notification
+}
+
+configCentOS(){
+    
+    echo $USER > /tmp/user.tmp
+    xterm -e "su -c 'sh $DIR/lib/centos.sh';read"
+    menu
+}
+
+menu(){
+    OP=$(zenity $TITLE "$ICON" --width 300 --height 370 --list --text "Selecione o a sua operadora:" \
+         --column "Operadora" $(cat "$DIR/etc/wvdial.conf" | egrep "\[*\]" | \
+                                sed  s/"\[Dialer\ "//g | sed s/\]//g) \
+                                "-" \
+                                "Instalar para você ($HOME)" \
+                                "Instalar para todos (/opt)" \
+                                "Desinstalar para você ($HOME)" \
+                                "Desinstalar para todos (/opt)" \
+                                "Configurar sudo (CentOS)" \
+         )
+
+    if [ -z "$OP" ]; then
+        exit 1
+    fi
+
+    case $OP in 
+        "Instalar para você ($HOME)") installuser ;;
+        "Instalar para todos (/opt)") installall ;;
+        "Desinstalar para você ($HOME)") removeuser ;;
+        "Desinstalar para todos (/opt)") removeall ;;
+        "Configurar sudo (CentOS)") configCentOS ;;
+        "-") menu ;;
+        *) conectar "$OP"
+    esac
+}
+
+check(){
+    if [ -z "`which wvdial`" ]; then
+        zenity $TITLE "$ICON" --warning --text "Não foi encontrado o wvdial \n\n Em Debian/Ubuntu faça: apt-get install wvdial \n\n Em RH/CentOS/Fedora faça: yum install wvdial"
+        exit 1
+    fi
+
+    if [ ! -c /dev/ttyUSB0 ]; then
+        zenity $TITLE "$ICON" --warning --text "Não foi encontrada uma porta ttyUSB0 \n\n Verifique se o seu modem foi reconhecido pelo sistema"
+        exit 1
+    fi
+    
+    menu
+}
+check
+
+
